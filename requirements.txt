@@ -1,0 +1,40 @@
+# JARVIS AI - Python dependencies
+# Install with:  pip install -r requirements.txt
+#
+# Dependencies are grouped by phase. Lines that are not needed yet
+# are commented out and will be un-commented in their phase.
+
+# --- PHASE 1: GUI ---
+flet>=0.28
+python-dotenv>=1.0
+
+# --- PHASE 2: AI brain (providers) ---
+openai>=1.40
+anthropic>=0.40
+
+# --- PHASE 3: Text-to-speech ---
+pyttsx3>=2.90
+
+# --- PHASE 4: Speech recognition ---
+SpeechRecognition>=3.10
+sounddevice>=0.4.6
+numpy>=1.26
+
+# --- PHASE 9: System monitoring ---
+psutil>=5.9
+
+# --- PHASE 10: Web search / weather ---
+requests>=2.31
+
+# --- PHASE 12: Document intelligence ---
+# pypdf          - PDF text extraction (plain, no OCR)
+# python-docx    - Word .docx
+# openpyxl       - Excel .xlsx
+# python-pptx    - PowerPoint .pptx
+pypdf>=4.0
+python-docx>=1.0
+openpyxl>=3.1
+python-pptx>=0.6.21
+
+# --- PHASE 13: Screenshot + vision ---
+Pillow>=10.0
