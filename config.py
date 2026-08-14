@@ -206,6 +206,18 @@ class Settings:
     bedtime_start: str = "22:30"
     bedtime_end: str = "06:30"
 
+    # --- Coding agent (Phase 38) ---
+    # The coding agent is JARVIS's "software engineer" mode: it explores
+    # the project, edits code, runs the tests and iterates on failures.
+    # CODER_PROVIDER / CODER_MODEL pick a coding-tuned model (e.g.
+    # anthropic + claude-sonnet, or groq/cerebras); when empty the main
+    # provider/model is reused. CODER_PROJECT_DIR defaults to the repo.
+    coder_provider: str = ""
+    coder_model: str = ""
+    coder_max_iterations: int = 6
+    coder_test_command: str = "python -m pytest"
+    coder_project_dir: str = ""
+
     # --- Web search / weather ---
     tavily_api_key: str = ""
     openweathermap_api_key: str = ""
@@ -320,6 +332,11 @@ class Settings:
             bedtime_end=_env("BEDTIME_END", "06:30"),
             tavily_api_key=_env("TAVILY_API_KEY"),
             openweathermap_api_key=_env("OPENWEATHERMAP_API_KEY"),
+            coder_provider=_env("CODER_PROVIDER"),
+            coder_model=_env("CODER_MODEL"),
+            coder_max_iterations=int(_env("CODER_MAX_ITERATIONS", "6")),
+            coder_test_command=_env("CODER_TEST_COMMAND", "python -m pytest"),
+            coder_project_dir=_env("CODER_PROJECT_DIR"),
             glasses_enabled=_env("GLASSES_ENABLED", "true").lower()
             in ("1", "true", "yes", "on"),
             glasses_device=_env("GLASSES_DEVICE"),

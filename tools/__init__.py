@@ -71,6 +71,7 @@ def build_default_registry(database=None, reminders=None) -> ToolRegistry:
     from tools.lighting import register_lighting_tools
     from tools.printing import register_printing_tools
     from tools.bedtime import register_bedtime_tools
+    from tools.coding import register_coding_tools
 
     registry = ToolRegistry()
     register_defaults(registry)
@@ -104,6 +105,7 @@ def build_default_registry(database=None, reminders=None) -> ToolRegistry:
     register_lighting_tools(registry)
     register_printing_tools(registry)
     register_bedtime_tools(registry)
+    register_coding_tools(registry)
     return registry
 
 

@@ -61,6 +61,10 @@ SENSITIVE_TOOLS = {
     "media_control",
     "export_pdf",
     "print_document",
+    # Phase 38: the coding agent edits files, so the whole session (and
+    # the individual edit tool) needs the user's explicit approval.
+    "coding_agent",
+    "edit_code",
 }
 
 _APPROVAL_RE = re.compile(
