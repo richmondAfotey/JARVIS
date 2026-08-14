@@ -136,14 +136,26 @@ class WakeWordListener:
             raise RuntimeError("sounddevice not available")
         _init_libs()
         blocksize = int(self.sample_rate * self.poll_seconds)
-        with sd.InputStream(
-            samplerate=self.sample_rate,
-            channels=1,
-            dtype="float32",
-            blocksize=blocksize,
-        ) as stream:
-            while not self._stop_event.is_set():
-                yield stream.read(blocksize)[0]
+        while not self._stop_event.is_set():
+            # While paused, do not hold the microphone open: the assistant
+            # may be recording from it, and a second open input stream can
+            # come back silent on Windows. Reopen the stream on resume.
+            self._paused.wait()
+            try:
+                with sd.InputStream(
+                    samplerate=self.sample_rate,
+                    channels=1,
+                    dtype="float32",
+                    blocksize=blocksize,
+                ) as stream:
+                    while not self._stop_event.is_set():
+                        if not self._paused.is_set():
+                            break  # paused mid-block: close and wait
+                        yield stream.read(blocksize)[0]
+            except Exception as exc:  # noqa: BLE001
+                if not self._stop_event.is_set() and self._paused.is_set():
+                    log.error("Wake word microphone error: %s", exc)
+                    time.sleep(1.0)
 
     def _loop(self) -> None:
         try:

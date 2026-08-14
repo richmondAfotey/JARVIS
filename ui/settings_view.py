@@ -70,6 +70,16 @@ class SettingsView(ft.AlertDialog):
             active_color=_ACCENT,
         )
 
+        # Phase 36: after a spoken reply, keep listening for the next thing
+        # to say so the user can have a back-and-forth hands-free chat.
+        from config import settings
+
+        self.continuous_enabled = ft.Switch(
+            label="Continuous conversation (keep listening)",
+            value=bool(getattr(settings, "continuous_conversation", False)),
+            active_color=_ACCENT,
+        )
+
         self.theme = ft.Dropdown(
             label="Theme",
             width=320,
@@ -178,6 +188,40 @@ class SettingsView(ft.AlertDialog):
             color=ft.Colors.with_opacity(0.6, "#9fb3d1"),
         )
 
+        # --- Bedtime mode (Phase 37) ----------------------------------------
+        # Quiet hours: dim the screen and keep replies text-only at night.
+        from config import settings as _settings
+
+        self.bedtime_schedule = ft.Switch(
+            label="Quiet hours (schedule bedtime mode)",
+            value=bool(getattr(_settings, "bedtime_schedule_enabled", False)),
+            active_color="#7c4dff",
+        )
+        self.bedtime_start = ft.TextField(
+            label="Start time (HH:MM)",
+            value=getattr(_settings, "bedtime_start", "22:30"),
+            width=160,
+            border_color=ft.Colors.with_opacity(0.4, _ACCENT),
+        )
+        self.bedtime_end = ft.TextField(
+            label="End time (HH:MM)",
+            value=getattr(_settings, "bedtime_end", "06:30"),
+            width=160,
+            border_color=ft.Colors.with_opacity(0.4, _ACCENT),
+        )
+        self.bedtime_now = ft.Switch(
+            label="Bedtime mode right now (dim + quiet)",
+            value=False,
+            active_color="#7c4dff",
+        )
+        self.bedtime_note = ft.Text(
+            "When on, the screen dims and JARVIS replies are text-only "
+            "during quiet hours (overnight windows supported).",
+            size=11,
+            italic=True,
+            color=ft.Colors.with_opacity(0.6, "#9fb3d1"),
+        )
+
         super().__init__(
             modal=True,
             title=ft.Text("SETTINGS", color=_ACCENT, weight=ft.FontWeight.BOLD),
@@ -199,6 +243,7 @@ class SettingsView(ft.AlertDialog):
             self.tts_speed,
             self.tts_enabled,
             self.wake_enabled,
+            self.continuous_enabled,
             self.theme,
             note,
         )
@@ -234,6 +279,15 @@ class SettingsView(ft.AlertDialog):
             self.glasses_device,
             self.glasses_note,
         )
+        bedtime_pane = self._pane(
+            self.bedtime_schedule,
+            ft.Row(
+                controls=[self.bedtime_start, self.bedtime_end],
+                spacing=12,
+            ),
+            self.bedtime_now,
+            self.bedtime_note,
+        )
 
         bar = ft.TabBar(
             tabs=[
@@ -243,6 +297,7 @@ class SettingsView(ft.AlertDialog):
                 ft.Tab(label="Permissions"),
                 ft.Tab(label="Camera"),
                 ft.Tab(label="Glasses"),
+                ft.Tab(label="Bedtime"),
             ],
             scrollable=True,
             indicator_color=_ACCENT,
@@ -258,11 +313,12 @@ class SettingsView(ft.AlertDialog):
                 permissions_pane,
                 camera_pane,
                 glasses_pane,
+                bedtime_pane,
             ],
             expand=True,
         )
         return ft.Tabs(
-            length=6,
+            length=7,
             selected_index=0,
             content=ft.Column(
                 height=400,

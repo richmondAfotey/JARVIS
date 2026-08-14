@@ -4,7 +4,30 @@ A standalone desktop AI assistant inspired by the *capabilities and feel*
 of a fictional AI assistant like JARVIS. Original design, original
 dialogue, original code.
 
-> **Status: PHASE 33 complete.** Smart glasses & wearables. The `glasses`
+> **Status: PHASE 37 complete.** Evening pack. `einstein` shares a daily
+> quote or fact, `lighting_ideas` suggests a lighting setup for any mood,
+> `bedtime_mode` dims the screen + goes quiet (text-only replies, with
+> optional scheduled quiet hours), and `print_document` sends a file to the
+> default Windows printer (approval-gated).
+> Phase 36 also remains: natural voice & continuous conversation.
+> `edge-tts` replaces the robotic system voice with natural neural voices
+> (Microsoft's online TTS; set `TTS_ENGINE=edge` and pick a voice) and a
+> hands-free **continuous conversation** mode keeps the mic open after each
+> reply so you can just keep talking - end a session by saying "stop".
+> Phase 35 also remains: the capabilities pack. `screen_ocr` reads text
+> off the screen (Gemini vision), `screen_time` tracks which apps you use,
+> `media_control` presses play/pause/volume keys, and `export_pdf` renders
+> reports to real PDFs - all with no new dependencies.
+> Phase 34 also remains: ethical hacking & security lab. Six
+> tools scoped to authorised testing: `network_scan` (connect-only
+> ping + port scan), `web_recon` (headers, missing security headers,
+> robots.txt, TLS), `cve_lookup` (public CVE data), `hash_identify`
+> (local hash recognition), `password_audit` (strength + private HIBP
+> breach check), and `learn_security` (a persistent security knowledge
+> bank seeded with OWASP and injected into every conversation). Scanning
+> and audit tools are approval-gated; exploitation of third parties is
+> explicitly out of scope.
+> Phase 33 also remains: smart glasses & wearables. The `glasses`
 > tool scans for paired Bluetooth devices, selects your glasses, and
 > delivers notifications - shown as a native Windows toast and spoken
 > aloud on audio-capable glasses. `GLASSES_MIRROR_REPLIES=true` pushes
@@ -865,6 +888,81 @@ proactive side of JARVIS:
 
 Everything above is additive and optional - set the `.env` flags you want
 and JARVIS picks them up.
+
+## Phase 34 - ethical hacking & security lab
+
+A built-in security lab scoped to **authorised testing** (your own machines,
+networks and accounts, or anything you have written permission to assess):
+
+* `network_scan` - connect-only scan: ping check + TCP port check on a host
+  or CIDR subnet (sends no payloads). Approval-gated.
+* `web_recon` - passive recon on a web target: HTTP status, server header,
+  which security headers are missing, `robots.txt`, TLS certificate info.
+  Approval-gated.
+* `cve_lookup` - look up a product/version against public CVE data (free,
+  no API key).
+* `hash_identify` - recognise hash algorithms locally (MD5/SHA-1/SHA-2,
+  bcrypt, SHA-crypt, argon2, WordPress/Drupal...). Nothing leaves the PC.
+* `password_audit` - local strength estimate + HaveIBeenPwned check using
+  k-anonymity: only the first 5 characters of the SHA-1 hash ever leave the
+  machine, and the password is never shown back. Approval-gated.
+* `learn_security` - save notes into a persistent security knowledge bank
+  (with an OWASP Top 10 baseline) that is injected into every conversation,
+  so JARVIS *learns* as you teach it.
+
+The tool descriptions make the ethics explicit: they analyse and test, they
+never attack; exploitation of third parties is out of scope.
+
+## Phase 35 - capabilities pack
+
+Everyday power tools with **no new dependencies**:
+
+* `screen_ocr` - read the text currently on screen (or a screen region) via
+  the Gemini vision model (needs `GOOGLE_API_KEY`).
+* `screen_time` - a small local sampler tracks which apps are in the
+  foreground; ask JARVIS what you have been using (top apps + share of time).
+* `media_control` - press standard media keys (play/pause/next/previous/stop,
+  volume up/down/mute) for whatever music or video is playing (Windows).
+  Approval-gated.
+* `export_pdf` - render text into a real PDF under `data/exports/` using a
+  pure-Python writer (no external PDF libraries). Approval-gated.
+
+## Phase 36 - natural voice & continuous conversation
+
+Two upgrades to how you *talk* to JARVIS:
+
+* **Natural neural voice (edge-tts).** The default system voice (SAPI5 via
+  pyttsx3) is robotic; `edge-tts` streams Microsoft's neural voices instead.
+  Enable it in `.env`: `TTS_ENGINE=edge`, then set `TTS_VOICE` to a voice
+  from `voice/text_to_speech.py::EDGE_VOICES` (e.g. `en-US-EmmaNeural`,
+  `en-US-GuyNeural`, `en-GB-SoniaNeural`); the Settings > Voice picker lists
+  them too. New deps: `pip install edge-tts soundfile`. Needs internet. If
+  they are missing, JARVIS logs why and carries on speaking (or text-only) -
+  it never crashes. Mood-adapted rate (happy/sad/angry) still applies.
+* **Continuous conversation.** Turn it on with the button next to the mic
+  (or Settings > Voice > "Continuous conversation", or
+  `CONTINUOUS_CONVERSATION=true` in `.env`). Click the mic and keep talking -
+  after each reply JARVIS waits until it has finished speaking, then listens
+  again, hands-free. End a session by saying **"stop"** (or "goodbye",
+  "that's all", "exit", ...) or by staying silent. The mode is saved between
+  restarts.
+
+## Phase 37 - evening pack
+
+Things to say as the day winds down (all local + free, no new dependencies):
+
+* **`einstein`** - *"give me an Einstein quote"*, *"a daily Einstein"*, or
+  *"an Einstein fact"*. A curated, deterministic quote/fact of the day.
+* **`lighting_ideas`** - *"lighting ideas for focus"* (or reading, relax,
+  movie, bedtime, energy). Suggests a colour temperature + brightness; it
+  cannot control physical bulbs, but can dim the screen to match.
+* **`bedtime_mode`** - *"goodnight, JARVIS"* dims the screen and makes
+  replies **quiet (text-only)** so nothing interrupts your sleep. Set
+  scheduled quiet hours via `BEDTIME_SCHEDULE_ENABLED` + `BEDTIME_START` /
+  `BEDTIME_END` in `.env`, or the Settings > Bedtime tab. Say *"good
+  morning"* / *"bedtime mode off"* to restore.
+* **`print_document`** - *"print this file"* sends a local `.txt`/`.md`/
+  `.pdf`/`.docx`/image to the default Windows printer. Approval-gated.
 
 ## Unrestricted mode (Phase 25)
 

@@ -319,6 +319,13 @@ class Brain:
                 from glasses.hub import glasses_prompt_block
 
                 prompt = f"{prompt}\n\n{glasses_prompt_block()}"
+            # Phase 34: ethical-hacking knowledge bank (persistent notes +
+            # OWASP baseline) so JARVIS can use what it has learned.
+            from tools.security_lab import security_knowledge_block
+
+            security_block = security_knowledge_block()
+            if security_block:
+                prompt = f"{prompt}\n\n{security_block}"
             if not self.unrestricted_mode:
                 prompt = f"{prompt}\n\n{SECURITY_RULES}"
             else:

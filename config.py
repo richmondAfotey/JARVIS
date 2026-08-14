@@ -121,6 +121,11 @@ class Settings:
 
     # --- Voice ---
     tts_engine: str = "system"
+    # Phase 36: natural neural voices via Microsoft Edge's online TTS.
+    # Select an edge voice with TTS_ENGINE=edge and TTS_VOICE (or
+    # TTS_EDGE_VOICE) set to a name from EDGE_VOICES, e.g.
+    # "en-US-EmmaNeural". Falls back silently to text-only if unavailable.
+    tts_edge_voice: str = ""
     tts_voice: str = ""
     tts_speed: int = 180
     tts_enabled: bool = True
@@ -136,6 +141,10 @@ class Settings:
     # Push-to-talk: hold a hotkey to talk (optional 'keyboard' library).
     ptt_enabled: bool = False
     ptt_hotkey: str = "ctrl+space"
+    # Phase 36: keep the microphone live after each spoken reply so you can
+    # keep talking without re-triggering. Ends when you say "stop" (or one
+    # of the other exit phrases) or stay silent for the listening timeout.
+    continuous_conversation: bool = False
 
     # --- Local RAG (Phase 30) ---
     # Where document indexes are cached (defaults to <data_dir>/rag_index).
@@ -187,6 +196,15 @@ class Settings:
     fall_alert_message: str = "HELP - I have fallen and cannot get up."
     # Seconds the user has to cancel a false alarm before help is alerted.
     fall_countdown_seconds: int = 15
+
+    # --- Bedtime mode (Phase 37) ---
+    # Quiet hours: when the schedule is on, the BedtimeMonitor dims the
+    # screen and JARVIS replies become text-only between BEDTIME_START and
+    # BEDTIME_END (HH:MM; overnight windows are supported). Without a
+    # schedule, bedtime mode is manual only (tool / Settings toggle).
+    bedtime_schedule_enabled: bool = False
+    bedtime_start: str = "22:30"
+    bedtime_end: str = "06:30"
 
     # --- Web search / weather ---
     tavily_api_key: str = ""
@@ -249,6 +267,7 @@ class Settings:
             in ("1", "true", "yes", "on"),
             script_max_steps=int(_env("SCRIPT_MAX_STEPS", "30")),
             tts_engine=_env("TTS_ENGINE", "system"),
+            tts_edge_voice=_env("TTS_EDGE_VOICE"),
             tts_voice=_env("TTS_VOICE"),
             tts_speed=int(_env("TTS_SPEED", "180")),
             tts_enabled=_env("TTS_ENABLED", "true").lower() in ("1", "true", "yes", "on"),
@@ -262,6 +281,8 @@ class Settings:
             in ("1", "true", "yes", "on"),
             ptt_enabled=_env("PTT_ENABLED", "false").lower() in ("1", "true", "yes", "on"),
             ptt_hotkey=_env("PTT_HOTKEY", "ctrl+space"),
+            continuous_conversation=_env("CONTINUOUS_CONVERSATION", "false").lower()
+            in ("1", "true", "yes", "on"),
             rag_index_dir=_env("RAG_INDEX_DIR"),
             plugins_dir=_env("PLUGINS_DIR"),
             uploads_dir=_env("UPLOADS_DIR"),
@@ -293,6 +314,10 @@ class Settings:
                 "HELP - I have fallen and cannot get up.",
             ),
             fall_countdown_seconds=int(_env("FALL_COUNTDOWN_SECONDS", "15")),
+            bedtime_schedule_enabled=_env("BEDTIME_SCHEDULE_ENABLED", "false").lower()
+            in ("1", "true", "yes", "on"),
+            bedtime_start=_env("BEDTIME_START", "22:30"),
+            bedtime_end=_env("BEDTIME_END", "06:30"),
             tavily_api_key=_env("TAVILY_API_KEY"),
             openweathermap_api_key=_env("OPENWEATHERMAP_API_KEY"),
             glasses_enabled=_env("GLASSES_ENABLED", "true").lower()

@@ -55,6 +55,12 @@ SENSITIVE_TOOLS = {
     "send_message",
     "make_call",
     "manage_window",
+    "network_scan",
+    "web_recon",
+    "password_audit",
+    "media_control",
+    "export_pdf",
+    "print_document",
 }
 
 _APPROVAL_RE = re.compile(

@@ -41,6 +41,37 @@ _BG_BOTTOM = "#080c16"
 
 log = get_logger(__name__)
 
+# Phase 36: continuous-conversation exit phrases. Conservative (exact
+# matches) so everyday requests such as "stop the music" do not end the
+# session by accident.
+CONTINUOUS_STOP_PHRASES = (
+    "stop",
+    "halt",
+    "end",
+    "end session",
+    "exit",
+    "quit",
+    "goodbye",
+    "bye",
+    "bye bye",
+    "that's all",
+    "that's all for now",
+    "never mind",
+    "no more",
+    "stop listening",
+    "i'm done",
+    "im done",
+    "end conversation",
+    "end the conversation",
+    "stop the conversation",
+)
+
+
+def is_continuous_stop(text: str) -> bool:
+    """True when `text` is one of the phrases that ends a continuous chat."""
+    t = (text or "").strip().lower().rstrip(".!?")
+    return t in CONTINUOUS_STOP_PHRASES
+
 
 class Dashboard(ft.Container):
     """The full futuristic command-centre layout."""
@@ -80,6 +111,13 @@ class Dashboard(ft.Container):
         )
         self._fall_active = False
         self._fall_cancelled = False
+
+        # Phase 37: bedtime mode (quiet hours). While active, replies are
+        # text-only and the screen is dimmed. The schedule thread runs in
+        # `start()`; `active` is read live so no extra plumbing is needed.
+        from system.bedtime import BedtimeMonitor
+
+        self.bedtime = BedtimeMonitor(settings)
 
         # Phase 32: uploaded/pasted files land in <data_dir>/uploads.
         uploads_env = settings.uploads_dir.strip()
@@ -187,6 +225,31 @@ class Dashboard(ft.Container):
             ),
             on_click=self._on_toggle_wake,
         )
+
+        # Phase 36: continuous hands-free conversation. When on, each mic
+        # session keeps listening after the reply so you can keep talking;
+        # say "stop" (or one of the exit phrases) to end the session.
+        self.continuous_button = ft.IconButton(
+            icon=ft.Icons.FORUM_OUTLINED,
+            icon_size=20,
+            tooltip="Continuous conversation: OFF (click to turn on)",
+            icon_color="#5a6b85",
+            style=ft.ButtonStyle(
+                color="#5a6b85",
+                shape=ft.CircleBorder(),
+                overlay_color=ft.Colors.with_opacity(0.35, "#00e5ff"),
+            ),
+            on_click=self._on_toggle_continuous,
+        )
+        self.continuous_enabled = bool(settings.continuous_conversation)
+        # Phase 22 fix: lets the continuous mic loop wait until a reply has
+        # finished playing before it listens again (so JARVIS never hears
+        # its own voice). _start_reply_speaking sets them.
+        self._speech_finished = threading.Event()
+        self._speech_pending = False
+        # True while a continuous mic session is active: keeps the wake
+        # listener paused the whole session so JARVIS never wakes itself.
+        self._continuous_session = False
 
         self.send_button = ft.IconButton(
             icon=ft.Icons.SEND,
@@ -418,6 +481,7 @@ class Dashboard(ft.Container):
                         controls=[
                             self.mic_button,
                             self.wake_button,
+                            self.continuous_button,
                             attach_btn,
                             paste_btn,
                             self.message_input,
@@ -534,14 +598,19 @@ class Dashboard(ft.Container):
             # stuck on "speaking" and `busy=True`, blocking follow-ups.
             # Instead the audio plays on its own daemon thread and the
             # chat flow resets to idle immediately.
-            if reply.strip() and self.tts.enabled:
+            # Phase 37: bedtime mode keeps replies quiet - text only.
+            if reply.strip() and self.tts.enabled and not self.bedtime.active:
                 # Phase 30: pass the detected tone so JARVIS speaks the
                 # reply in a matching mood (slower for sad, brighter for
                 # happy) when mood emphasis is enabled.
                 self._start_reply_speaking(reply, emotion=emotion)
 
             # Phase 33: optionally mirror the reply to the smart glasses.
-            if settings.glasses_enabled and settings.glasses_mirror_replies:
+            if (
+                settings.glasses_enabled
+                and settings.glasses_mirror_replies
+                and not self.bedtime.active
+            ):
                 self._mirror_to_glasses(reply)
             self.status.set_state("idle")
             self.orb.set_mode("idle")
@@ -580,6 +649,11 @@ class Dashboard(ft.Container):
         # Generous cap: ~10s per full screen of text, minimum 20s.
         cap = max(20.0, (len(reply) / 80) * 10)
 
+        # Phase 36: tell the continuous mic loop when this reply is done
+        # playing, so it can safely start listening again.
+        self._speech_finished.clear()
+        self._speech_pending = True
+
         def play() -> None:
             done = threading.Event()
 
@@ -587,6 +661,8 @@ class Dashboard(ft.Container):
                 try:
                     self.tts.speak(reply, emotion=emotion)
                 finally:
+                    self._speech_finished.set()
+                    self._speech_pending = False
                     done.set()
 
             speaker = threading.Thread(target=_speak, daemon=True)
@@ -594,7 +670,10 @@ class Dashboard(ft.Container):
             # Never wait forever on the engine - cap the wait and move on.
             speaker.join(timeout=cap)
 
-            if wake_was_running:
+            # Resume the wake listener only outside an active continuous
+            # session (Phase 36): that session keeps it paused until it
+            # finishes, so jarring wake-ups never interrupt the loop.
+            if wake_was_running and not self._continuous_session:
                 try:
                     self.wake_listener.resume()
                 except Exception as exc:
@@ -651,6 +730,36 @@ class Dashboard(ft.Container):
             "tts_enabled", "true" if self.tts.enabled else "false"
         )
 
+    def _on_toggle_continuous(self, e) -> None:
+        """Turn hands-free continuous conversation on or off (Phase 36)."""
+        self.continuous_enabled = not self.continuous_enabled
+        self._set_continuous_enabled(self.continuous_enabled)
+
+    def _set_continuous_enabled(self, enabled: bool) -> None:
+        """Apply + persist the continuous-conversation mode, update its button."""
+        self.continuous_enabled = enabled
+        self.continuous_button.icon = (
+            ft.Icons.FORUM if enabled else ft.Icons.FORUM_OUTLINED
+        )
+        self.continuous_button.icon_color = _ACCENT if enabled else "#5a6b85"
+        self.continuous_button.tooltip = (
+            "Continuous conversation: ON (say 'stop' to end a session)"
+            if enabled
+            else "Continuous conversation: OFF (click to turn on)"
+        )
+        self.continuous_button.update()
+        self.database.set_preference(
+            "continuous_conversation", "true" if enabled else "false"
+        )
+        self.chat.add_message(
+            "assistant",
+            "Continuous conversation is now ON. Click the mic and keep "
+            "talking - I will keep listening after each reply. Say 'stop' "
+            "to end the session."
+            if enabled
+            else "Continuous conversation is OFF.",
+        )
+
     def _on_mic(self, e) -> None:
         # Ignore while another task (or the microphone) is in use.
         if self.busy:
@@ -663,13 +772,31 @@ class Dashboard(ft.Container):
             return ""
         return f"\n(voice tone: {emotion.emotion})"
 
+    def _listen_once(self):
+        """Record + transcribe one utterance, returning (text, emotion).
+
+        Reused by _mic_flow for both single-shot and continuous sessions so
+        the transcription/mood logic lives in exactly one place.
+        """
+        if settings.tone_emotion_enabled:
+            return self.stt.listen_with_emotion()
+        return self.stt.listen(), None
+
     def _mic_flow(self) -> None:
-        """Worker thread: listen, transcribe, then hand the text to the brain."""
+        """Worker thread: listen, transcribe, then hand the text to the brain.
+
+        When continuous conversation is on (Phase 36), the session keeps
+        listening after each reply - JARVIS pauses between turns until the
+        own reply has finished playing, then listens again. The session
+        ends on an exit phrase ("stop", "goodbye", ...) or when nothing is
+        heard for the listening timeout, putting the mic back to one-shot.
+        """
         self.busy = True
         # Keep the wake listener quiet while we actively listen.
         wake_was_running = self.wake_listener.running
         if wake_was_running:
             self.wake_listener.pause()
+        self._continuous_session = bool(self.continuous_enabled)
         try:
             if not self.stt.libraries_available:
                 self.chat.add_message(
@@ -692,33 +819,59 @@ class Dashboard(ft.Container):
                 "assistant",
                 "Listening... speak now. (Click the mic again to cancel.)",
             )
-            if settings.tone_emotion_enabled:
-                text, emotion = self.stt.listen_with_emotion()
-            else:
-                text = self.stt.listen()
-                emotion = None
-            if not text:
-                self.chat.add_message("assistant", "I did not catch that. Please try again.")
-                return
-            # Phase 29: show the spoken words (and any tone hint) in the chat.
-            self.chat.add_message("user", text + self._microphone_note(emotion))
-            tone = emotion.emotion if emotion is not None else None
-            # Phase 30: remember the detected tone so the mood_report tool
-            # can spot trends over time (silently skipped for neutral).
-            if emotion is not None and emotion.emotion not in ("neutral", ""):
-                try:
-                    from tools.mood import log_mood_emotion
 
-                    log_mood_emotion(emotion.emotion, emotion.confidence)
-                except Exception as exc:  # noqa: BLE001 - mood logging never breaks chat
-                    log.debug("Mood log failed: %s", exc)
-            self._process_message(text, emotion=tone)
+            while True:
+                text, emotion = self._listen_once()
+                if not text:
+                    if self.continuous_enabled:
+                        self.chat.add_message(
+                            "assistant",
+                            "I did not hear anything, so I stopped listening. "
+                            "Continuous conversation is off now - click the mic "
+                            "to talk again.",
+                        )
+                    else:
+                        self.chat.add_message(
+                            "assistant", "I did not catch that. Please try again."
+                        )
+                    break
+                # Phase 29: show the spoken words (and any tone hint) in the chat.
+                self.chat.add_message("user", text + self._microphone_note(emotion))
+                tone = emotion.emotion if emotion is not None else None
+                # Phase 30: remember the detected tone so the mood_report tool
+                # can spot trends over time (silently skipped for neutral).
+                if emotion is not None and emotion.emotion not in ("neutral", ""):
+                    try:
+                        from tools.mood import log_mood_emotion
+
+                        log_mood_emotion(emotion.emotion, emotion.confidence)
+                    except Exception as exc:  # noqa: BLE001 - mood logging never breaks chat
+                        log.debug("Mood log failed: %s", exc)
+
+                if is_continuous_stop(text):
+                    self.chat.add_message(
+                        "assistant",
+                        "Ending the conversation. Say 'hey jarvis' or click the "
+                        "mic to talk again.",
+                    )
+                    break
+
+                self._process_message(text, emotion=tone)
+
+                # In continuous mode, wait for the reply to finish playing
+                # before listening again so JARVIS never transcribes itself.
+                # Only wait when a reply actually started speaking.
+                if not self.continuous_enabled or not self._speech_pending:
+                    break
+                cap = max(20.0, (len(text) / 40) * 8)
+                self._speech_finished.wait(timeout=cap)
         except Exception as exc:
             log.error("Mic flow failed: %s", exc)
             self.chat.add_message("assistant", str(exc))
             self.status.set_state("error")
             self.orb.set_mode("idle")
         finally:
+            self._continuous_session = False
             if wake_was_running:
                 self.wake_listener.resume()
             self.busy = False
@@ -732,11 +885,16 @@ class Dashboard(ft.Container):
         self.settings_dialog.refresh_updates()
         self.settings_dialog.refresh_memories()
         self.settings_dialog.wake_enabled.value = self.wake_listener.running
+        self.settings_dialog.continuous_enabled.value = self.continuous_enabled
         self.settings_dialog.unrestricted_enabled.value = self.brain.unrestricted_mode
         self.settings_dialog.camera_enabled.value = self.camera_monitor.running
         self.settings_dialog.glasses_enabled.value = settings.glasses_enabled
         self.settings_dialog.glasses_mirror.value = settings.glasses_mirror_replies
         self.settings_dialog.glasses_device.value = settings.glasses_device
+        self.settings_dialog.bedtime_schedule.value = settings.bedtime_schedule_enabled
+        self.settings_dialog.bedtime_start.value = settings.bedtime_start
+        self.settings_dialog.bedtime_end.value = settings.bedtime_end
+        self.settings_dialog.bedtime_now.value = self.bedtime.active
         self.settings_dialog.open = True
         # A dialog inside the overlay only becomes "attached" to the page
         # after a full page.update(), so that is what we must call here.
@@ -755,6 +913,21 @@ class Dashboard(ft.Container):
         # Apply the wake-word toggle from settings.
         self._set_wake_running(view.wake_enabled.value)
 
+        # Apply the continuous-conversation toggle (Phase 36).
+        enabled = bool(view.continuous_enabled.value)
+        if enabled != self.continuous_enabled:
+            self.continuous_enabled = enabled
+            self.continuous_button.icon = (
+                ft.Icons.FORUM if enabled else ft.Icons.FORUM_OUTLINED
+            )
+            self.continuous_button.icon_color = _ACCENT if enabled else "#5a6b85"
+            self.continuous_button.tooltip = (
+                "Continuous conversation: ON (say 'stop' to end a session)"
+                if enabled
+                else "Continuous conversation: OFF (click to turn on)"
+            )
+            self.continuous_button.update()
+
         # Persist the choices so they survive a restart (Phase 14).
         self.database.set_preference(
             "tts_enabled", "true" if self.tts.enabled else "false"
@@ -763,6 +936,9 @@ class Dashboard(ft.Container):
         self.database.set_preference("tts_speed", str(view.tts_speed.value or 180))
         self.database.set_preference(
             "wake_word_enabled", "true" if view.wake_enabled.value else "false"
+        )
+        self.database.set_preference(
+            "continuous_conversation", "true" if enabled else "false"
         )
 
         # Phase 25: apply + persist the no-boundaries mode live.
@@ -787,11 +963,26 @@ class Dashboard(ft.Container):
         )
         self.database.set_preference("glasses_device", settings.glasses_device)
 
+        # Phase 37: apply + persist the bedtime quiet-hours choices.
+        settings.bedtime_schedule_enabled = bool(view.bedtime_schedule.value)
+        settings.bedtime_start = (view.bedtime_start.value or "22:30").strip()
+        settings.bedtime_end = (view.bedtime_end.value or "06:30").strip()
+        self.database.set_preference(
+            "bedtime_schedule_enabled",
+            "true" if settings.bedtime_schedule_enabled else "false",
+        )
+        self.database.set_preference("bedtime_start", settings.bedtime_start)
+        self.database.set_preference("bedtime_end", settings.bedtime_end)
+        # The "right now" switch overrides the schedule (which reasserts at
+        # the next tick if the clock is inside the quiet window).
+        self.bedtime.set_active(bool(view.bedtime_now.value))
+
         self.chat.add_message(
             "assistant",
             "Voice settings saved."
             f" Unrestricted mode: {'ON' if self.brain.unrestricted_mode else 'OFF'}."
-            f" Camera fall detection: {'ON' if view.camera_enabled.value else 'OFF'}.",
+            f" Camera fall detection: {'ON' if view.camera_enabled.value else 'OFF'}."
+            f" Bedtime mode: {'ON' if self.bedtime.active else 'OFF'}.",
         )
 
     def _apply_saved_preferences(self) -> None:
@@ -816,6 +1007,20 @@ class Dashboard(ft.Container):
             "yes",
             "on",
         )
+        # Phase 36: restore hands-free continuous conversation.
+        if "continuous_conversation" in prefs:
+            self.continuous_enabled = prefs["continuous_conversation"].lower() in (
+                "1", "true", "yes", "on"
+            )
+            self.continuous_button.icon = (
+                ft.Icons.FORUM if self.continuous_enabled else ft.Icons.FORUM_OUTLINED
+            )
+            self.continuous_button.icon_color = _ACCENT if self.continuous_enabled else "#5a6b85"
+            self.continuous_button.tooltip = (
+                "Continuous conversation: ON (say 'stop' to end a session)"
+                if self.continuous_enabled
+                else "Continuous conversation: OFF (click to turn on)"
+            )
         # Phase 25: restore the no-boundaries mode saved in a previous session.
         if "unrestricted_mode" in prefs:
             self._set_unrestricted(
@@ -832,6 +1037,15 @@ class Dashboard(ft.Container):
             )
         if prefs.get("glasses_device"):
             settings.glasses_device = prefs["glasses_device"]
+        # Phase 37: restore the bedtime quiet-hours choices saved earlier.
+        if "bedtime_schedule_enabled" in prefs:
+            settings.bedtime_schedule_enabled = prefs[
+                "bedtime_schedule_enabled"
+            ].lower() in ("1", "true", "yes", "on")
+        if prefs.get("bedtime_start"):
+            settings.bedtime_start = prefs["bedtime_start"]
+        if prefs.get("bedtime_end"):
+            settings.bedtime_end = prefs["bedtime_end"]
         # Sync the speaker button with the restored TTS state. No .update()
         # here: the control is not on the page yet, and the first layout
         # pass renders the icon we set.
@@ -908,6 +1122,9 @@ class Dashboard(ft.Container):
         # Phase 28: start the background threat scanner.
         self.threat_monitor.start()
         self.system.threats.set_status(self.threat_monitor.status(), len(self.threat_monitor.alerts()))
+
+        # Phase 37: start the bedtime quiet-hours schedule (if any).
+        self.bedtime.start()
 
         # Phase 31: always-on camera fall detection. Defaults to on via
         # CAMERA_FALL_ENABLED, but a saved Settings toggle wins: turning it
@@ -1393,6 +1610,11 @@ class Dashboard(ft.Container):
                 self.focus_recap.stop()
         except Exception as exc:  # noqa: BLE001
             log.debug("Focus recap stop failed: %s", exc)
+        try:
+            if hasattr(self, "bedtime"):
+                self.bedtime.stop()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("Bedtime monitor stop failed: %s", exc)
         try:
             self.chat.stop_caret()
         except Exception as exc:  # noqa: BLE001

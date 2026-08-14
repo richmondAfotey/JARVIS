@@ -94,7 +94,7 @@ class SpeechToText:
         self,
         provider: str = "google",
         sample_rate: int = SAMPLE_RATE,
-        silence_threshold: float = 0.015,
+        silence_threshold: float = 0.008,
         silence_after: float = 0.9,
         max_timeout: float = 8.0,
         language: str = "",
@@ -142,6 +142,20 @@ class SpeechToText:
         heard_speech = False
         start = time.time()
 
+        # Adaptive noise gate instead of a fixed threshold. A fixed threshold
+        # was brittle: a quiet microphone (or speech spoken far from it) never
+        # crossed it, so record() returned None and the UI said "No speech
+        # detected" while the user was clearly talking. We track a rolling
+        # noise floor from the quiet blocks and gate on
+        # max(silence_threshold, floor * 2): quiet rooms fall back to the
+        # threshold, noisy rooms raise the gate so room tone isn't heard as
+        # speech. Two consecutive above-gate blocks are required before the
+        # recording starts, so a single loud blip doesn't fake speech.
+        abs_floor = self.silence_threshold
+        noise_floor = 0.0
+        candidate: list[bytes] = []
+        peak_rms = 0.0
+
         with sd.InputStream(
             samplerate=self.sample_rate,
             channels=1,
@@ -151,19 +165,40 @@ class SpeechToText:
             while time.time() - start < timeout:
                 data, _overflowed = stream.read(blocksize)
                 rms = float(np.sqrt(np.mean(np.square(data)))) if data.size else 0.0
+                peak_rms = max(peak_rms, rms)
 
-                if rms > self.silence_threshold:
-                    frames.append(_frames_to_pcm16(data))
-                    heard_speech = True
-                    silence_blocks = 0
+                gate = max(abs_floor, noise_floor * 2.0)
+                if rms > gate:
+                    candidate.append(_frames_to_pcm16(data))
+                    if len(candidate) >= 2:
+                        frames.extend(candidate)
+                        candidate = []
+                        heard_speech = True
+                        silence_blocks = 0
                 elif heard_speech:
                     silence_blocks += 1
                     if silence_blocks * chunk_seconds >= self.silence_after:
                         break
+                else:
+                    # No speech yet: keep learning the room tone so a loud
+                    # room raises the gate instead of faking speech.
+                    candidate.clear()
+                    noise_floor = noise_floor * 0.8 + rms * 0.2
 
         if not heard_speech or not frames:
+            self._last_no_speech_note = self._no_speech_note(peak_rms)
             return None
+        self._last_no_speech_note = None
         return AudioData(b"".join(frames), self.sample_rate, SAMPLE_WIDTH)
+
+    def _no_speech_note(self, peak_rms: float) -> str | None:
+        """A friendlier explanation for record() returning None."""
+        if peak_rms > self.silence_threshold * 2:
+            return (
+                "I heard sound but couldn't make out clear speech. "
+                "Please speak more clearly or move closer to the microphone."
+            )
+        return None
 
     # -- Recognition --------------------------------------------------------
     def _get_recognizer(self):
@@ -222,6 +257,11 @@ class SpeechToText:
             self._listening = True
             try:
                 audio = self.record(timeout)
+                if audio is None:
+                    note = getattr(self, "_last_no_speech_note", None) or (
+                        "No speech detected."
+                    )
+                    raise STTError(note)
                 return self.recognize(audio)
             finally:
                 self._listening = False
@@ -238,6 +278,11 @@ class SpeechToText:
             self._listening = True
             try:
                 audio = self.record(timeout)
+                if audio is None:
+                    note = getattr(self, "_last_no_speech_note", None) or (
+                        "No speech detected."
+                    )
+                    raise STTError(note)
                 emotion = self._detect_emotion(audio)
                 return self.recognize(audio), emotion
             finally:

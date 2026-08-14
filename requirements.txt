@@ -14,6 +14,10 @@ anthropic>=0.40
 
 # --- PHASE 3: Text-to-speech ---
 pyttsx3>=2.90
+# Phase 36: natural neural voices via Microsoft Edge online TTS. Optional -
+# the app runs fine without it (falls back to system voices / text-only).
+edge-tts>=7.0
+soundfile>=0.12
 
 # --- PHASE 4: Speech recognition ---
 SpeechRecognition>=3.10

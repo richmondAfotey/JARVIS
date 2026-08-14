@@ -65,6 +65,12 @@ def build_default_registry(database=None, reminders=None) -> ToolRegistry:
     from tools.messaging import register_messaging_tools
     from tools.contacts import register_contacts_tools
     from tools.glasses import register_glasses_tools
+    from tools.security_lab import register_security_lab_tools
+    from tools.capabilities import register_capability_tools
+    from tools.einstein import register_einstein_tools
+    from tools.lighting import register_lighting_tools
+    from tools.printing import register_printing_tools
+    from tools.bedtime import register_bedtime_tools
 
     registry = ToolRegistry()
     register_defaults(registry)
@@ -92,6 +98,12 @@ def build_default_registry(database=None, reminders=None) -> ToolRegistry:
     register_messaging_tools(registry)
     register_contacts_tools(registry)
     register_glasses_tools(registry)
+    register_security_lab_tools(registry)
+    register_capability_tools(registry)
+    register_einstein_tools(registry)
+    register_lighting_tools(registry)
+    register_printing_tools(registry)
+    register_bedtime_tools(registry)
     return registry
 
 

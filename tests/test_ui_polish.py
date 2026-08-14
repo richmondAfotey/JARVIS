@@ -1,5 +1,6 @@
 """Tests for Phase 17 UI/UX polish components (constructed without a page)."""
 
+import threading
 import time
 
 from ui.chat_view import ChatView
@@ -140,7 +141,31 @@ def _make_dashboard(**tts_kwargs):
     dash.busy = False
     dash._page = _FakePage()
     dash._speaking_seq = 0
+    _attach_dashboard_voice_state(dash)
     return dash
+
+
+def _attach_dashboard_voice_state(dash, continuous=False):
+    """Phase 36/37 wiring the Dashboard now expects on its attributes."""
+    dash.continuous_enabled = continuous
+    dash._continuous_session = False
+    dash._speech_finished = threading.Event()
+    dash._speech_pending = False
+    dash.continuous_button = type(
+        "CB",
+        (),
+        {
+            "update": lambda self: None,
+            "icon": None,
+            "icon_color": None,
+            "tooltip": None,
+        },
+    )()
+    dash.bedtime = type(
+        "BT",
+        (),
+        {"active": False, "set_active": lambda self, _active: None},
+    )()
 
 
 def test_reply_speaking_returns_immediately_not_blocking():
@@ -203,6 +228,7 @@ def test_settings_save_persists_camera_preference(monkeypatch):
     dash.speaker_button = type(
         "S", (), {"update": lambda self: None}
     )()
+    _attach_dashboard_voice_state(dash)
     calls = {"camera": None}
 
     def fake_set_camera(running):
@@ -248,6 +274,7 @@ def test_settings_save_persists_camera_enabled():
     dash.speaker_button = type(
         "S", (), {"update": lambda self: None}
     )()
+    _attach_dashboard_voice_state(dash)
     dash._set_camera_monitor_running = lambda running: None
     dash._set_unrestricted = lambda _enabled: None
     dash._set_wake_running = lambda _enabled: None

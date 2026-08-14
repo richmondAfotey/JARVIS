@@ -87,6 +87,8 @@ class _FakeSettings:
             "groq_model": "llama-3.3-70b-versatile",
             "huggingface_api_key": "",
             "huggingface_model": "meta-llama/Llama-3.3-70B-Instruct",
+            "cerebras_api_key": "",
+            "cerebras_model": "gpt-oss-120b",
             "openrouter_models": [],
         }
         defaults.update(kw)
