@@ -117,11 +117,21 @@ def build_provider(settings=settings) -> BaseProvider:
             )
         log.warning("AI_PROVIDER=anthropic but ANTHROPIC_API_KEY is empty - using offline mode.")
 
-    elif choice in ("google", "groq", "huggingface"):
+    elif choice in ("google", "groq", "huggingface", "cerebras"):
         key = getattr(settings, f"{choice}_api_key")
         model = getattr(settings, f"{choice}_model")
         if key:
-            return _compatible_provider(choice, key, model)
+            chain = _compatible_providers(
+                choice,
+                key,
+                model,
+                getattr(settings, f"{choice}_backup_model", "") or "",
+            )
+            if len(chain) > 1:
+                from ai.providers.fallback import FallbackProvider
+
+                return FallbackProvider(chain)
+            return chain[0]
         log.warning(
             "AI_PROVIDER=%s but the matching API key is empty - using offline mode.",
             choice,
@@ -130,17 +140,53 @@ def build_provider(settings=settings) -> BaseProvider:
     return LocalEchoProvider()
 
 
-def _compatible_provider(name: str, api_key: str, model: str) -> BaseProvider:
+def _compatible_provider(
+    name: str,
+    api_key: str,
+    model: str,
+    base_url: str = "",
+    default_model: str = "",
+) -> BaseProvider:
     """Build an OpenAI-compatible provider for a known free endpoint."""
     from ai.providers.openai_compat import FREE_ENDPOINTS, OpenAICompatibleProvider
 
-    base_url, default_model = FREE_ENDPOINTS[name]
+    if not base_url or not default_model:
+        known_base, known_model = FREE_ENDPOINTS[name]
+        base_url = base_url or known_base
+        default_model = default_model or known_model
     return OpenAICompatibleProvider(
         name=name,
         api_key=api_key,
         model=model or default_model,
         base_url=base_url,
     )
+
+
+def _compatible_providers(
+    name: str,
+    api_key: str,
+    model: str,
+    backup_model: str = "",
+) -> list[BaseProvider]:
+    """The primary provider plus its backup model, if one is configured.
+
+    Some free tiers give different quotas per model (e.g. Google's
+    `gemini-flash-latest` has a tiny 20 requests/day while
+    `gemini-flash-lite-latest` has the large free limit). Both entries
+    share the same API key and endpoint, so the backup is cheap to add -
+    it is only tried after the primary model is rate-limited.
+    """
+    from ai.providers.openai_compat import FREE_ENDPOINTS
+
+    base_url, default_model = FREE_ENDPOINTS[name]
+    providers = [_compatible_provider(name, api_key, model, base_url, default_model)]
+    if backup_model:
+        providers.append(
+            _compatible_provider(
+                f"{name}-backup", api_key, backup_model, base_url, default_model
+            )
+        )
+    return providers
 
 
 def _free_provider_chain(settings) -> list[BaseProvider]:
@@ -160,10 +206,12 @@ def _free_provider_chain(settings) -> list[BaseProvider]:
         else:
             chain.append(OpenAIProvider(settings.openai_api_key, settings.openai_model, base_url))
 
-    for name in ("google", "groq", "huggingface"):
+    for name in ("google", "groq", "huggingface", "cerebras"):
         key = getattr(settings, f"{name}_api_key")
         if key:
-            chain.append(_compatible_provider(name, key, getattr(settings, f"{name}_model")))
+            model = getattr(settings, f"{name}_model")
+            backup = getattr(settings, f"{name}_backup_model", "") or ""
+            chain.extend(_compatible_providers(name, key, model, backup))
 
     return chain
 
@@ -231,13 +279,14 @@ class Brain:
         if choice == "auto":
             return any(
                 (settings.openai_api_key, settings.google_api_key,
-                 settings.groq_api_key, settings.huggingface_api_key)
+                 settings.groq_api_key, settings.huggingface_api_key,
+                 settings.cerebras_api_key)
             )
         if choice == "openai":
             return bool(settings.openai_api_key)
         if choice == "anthropic":
             return bool(settings.anthropic_api_key)
-        if choice in ("google", "groq", "huggingface"):
+        if choice in ("google", "groq", "huggingface", "cerebras"):
             return bool(getattr(settings, f"{choice}_api_key"))
         return False
 

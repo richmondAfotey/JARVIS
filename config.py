@@ -91,10 +91,16 @@ class Settings:
     # one when the previous is rate-limited.
     google_api_key: str = ""
     google_model: str = "gemini-flash-latest"
+    #: Used as the second choice for the same provider when the primary
+    #: model hits its free-tier quota, e.g. gemini-flash-latest (20/day)
+    #: -> gemini-flash-lite-latest (the higher free limit).
+    google_backup_model: str = "gemini-flash-lite-latest"
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
     huggingface_api_key: str = ""
     huggingface_model: str = "meta-llama/Llama-3.3-70B-Instruct"
+    cerebras_api_key: str = ""
+    cerebras_model: str = "gpt-oss-120b"
     openrouter_models: list[str] = field(default_factory=list)
 
     # --- Tools (Phase 6) ---
@@ -217,12 +223,15 @@ class Settings:
             local_llm_model=_env("LOCAL_LLM_MODEL", "llama3.1"),
             google_api_key=_env("GOOGLE_API_KEY"),
             google_model=_env("GOOGLE_MODEL", "gemini-flash-latest"),
+            google_backup_model=_env("GOOGLE_BACKUP_MODEL", "gemini-flash-lite-latest"),
             groq_api_key=_env("GROQ_API_KEY"),
             groq_model=_env("GROQ_MODEL", "llama-3.3-70b-versatile"),
             huggingface_api_key=_env("HUGGINGFACE_API_KEY"),
             huggingface_model=_env(
                 "HUGGINGFACE_MODEL", "meta-llama/Llama-3.3-70B-Instruct"
             ),
+            cerebras_api_key=_env("CEREBRAS_API_KEY"),
+            cerebras_model=_env("CEREBRAS_MODEL", "gpt-oss-120b"),
             openrouter_models=[
                 m.strip()
                 for m in _env(

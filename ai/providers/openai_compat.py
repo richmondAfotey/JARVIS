@@ -19,12 +19,14 @@ from ai.providers.openai_provider import OpenAIProvider
 GOOGLE_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 HUGGINGFACE_BASE_URL = "https://router.huggingface.co/community/v1"
+CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
 
 #: name -> (base_url, default model)
 FREE_ENDPOINTS: dict[str, tuple[str, str]] = {
     "google": (GOOGLE_BASE_URL, "gemini-flash-latest"),
     "groq": (GROQ_BASE_URL, "llama-3.3-70b-versatile"),
     "huggingface": (HUGGINGFACE_BASE_URL, "meta-llama/Llama-3.3-70B-Instruct"),
+    "cerebras": (CEREBRAS_BASE_URL, "gpt-oss-120b"),
 }
 
 
